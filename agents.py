@@ -221,15 +221,32 @@ Note: Some summaries may indicate no query was available or no information was f
     )
 
 
-def create_description_agent() -> Agent:
-    """Creates the Description Agent that generates a one-sentence description for the blog post."""
-    return Agent(
-        name="DescriptionAgent",
-        model=Gemini(
-            model="gemini-2.5-flash-lite",
-            retry_options=retry_config
-        ),
-        instruction="""You are a blog description specialist. Your job is to write a compelling one-sentence description in Japanese for a blog post.
+def create_description_agent(translate_to_english: bool = False) -> Agent:
+    """Creates the Description Agent that generates a one-sentence description for the blog post.
+    
+    Args:
+        translate_to_english: If True, generates description in English; otherwise in Japanese
+    """
+    if translate_to_english:
+        instruction = """You are a blog description specialist. Your job is to write a compelling one-sentence description in English for a blog post.
+
+You will receive:
+- The blog post content: {final_blog_post}
+
+Your task:
+1. Read and understand the blog post content (it may be in Japanese, but you should write the description in English)
+2. Write a single, compelling sentence in English that captures the essence and main theme of the blog post
+3. The description should:
+   - Be exactly one sentence (no periods in the middle, just one sentence ending with a period)
+   - Be engaging and informative
+   - Capture the main topic, analysis, or insight presented in the blog post
+   - Use natural English that flows well
+   - Spell names and advanced technical terms appropriately (e.g., "Large Language Model" or "LLM", "SaaS")
+   - Be concise but descriptive enough to give readers a clear sense of what the blog post is about
+   - Follow the style of the example: "Analyzes the technical evolution, current challenges, and future prospects of long context capabilities and thinking abilities in Gemini 2.5 Pro, based on interviews with Google DeepMind researchers."
+4. Output ONLY the description sentence, nothing else. No prefix, no explanation, just the sentence itself."""
+    else:
+        instruction = """You are a blog description specialist. Your job is to write a compelling one-sentence description in Japanese for a blog post.
 
 You will receive:
 - The blog post content: {final_blog_post}
@@ -245,7 +262,49 @@ Your task:
    - Spell names and advanced technical terms in the alphabet (e.g., "Large Language Model" instead of "大規模言語モデル" or "LLM", "SaaS" instead of "サース").
    - Be concise but descriptive enough to give readers a clear sense of what the blog post is about
    - Follow the style of the example: "Google DeepMindの研究者へのインタビューを基に、Gemini 2.5 Proにおけるlong context能力と思考能力の技術的進化、現状の課題、そして今後の展望を分析する。"
-4. Output ONLY the description sentence, nothing else. No prefix, no explanation, just the sentence itself.""",
+4. Output ONLY the description sentence, nothing else. No prefix, no explanation, just the sentence itself."""
+    
+    return Agent(
+        name="DescriptionAgent",
+        model=Gemini(
+            model="gemini-2.5-flash-lite",
+            retry_options=retry_config
+        ),
+        instruction=instruction,
         output_key="blog_description"
+    )
+
+
+def create_translator_agent() -> Agent:
+    """Creates the Translator Agent that translates the Japanese blog post to English."""
+    return Agent(
+        name="TranslatorAgent",
+        model=Gemini(
+            model="gemini-3-pro-preview",
+            retry_options=retry_config
+        ),
+        instruction="""You are a professional translator specializing in technical blog posts. Your job is to translate a Japanese blog post to English while preserving all formatting, structure, and meaning.
+
+You will receive:
+- The Japanese blog post: {final_blog_post}
+
+Your task:
+1. Read and understand the entire Japanese blog post
+2. Rephrase the blog post to natural, fluent English
+3. Preserve ALL markdown formatting:
+   - Keep all headings (#, ##, ###, etc.)
+   - Preserve all markdown links [text](url) exactly as they are
+   - Maintain code blocks, lists, and other markdown elements
+   - Keep the same structure and organization
+5. Translate technical terms appropriately:
+   - Keep technical terms in English if they're already in English in the original
+   - Translate Japanese technical terms to their standard English equivalents
+   - Maintain consistency in terminology throughout
+6. Ensure the translation reads naturally in English
+7. Output the complete translated blog post in English, maintaining all markdown formatting and structure
+8. The title should remain as a "#" heading at the top
+
+IMPORTANT: Output ONLY the translated blog post, nothing else. No prefix, no explanation, just the translated content.""",
+        output_key="final_blog_post"
     )
 

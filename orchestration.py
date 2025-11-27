@@ -8,15 +8,17 @@ from agents import (
     create_search_summarize_agent,
     create_blog_writer_agent,
     create_link_enhancer_agent,
-    create_description_agent
+    create_description_agent,
+    create_translator_agent
 )
 
 
-def create_blog_agent_system(custom_instruction: str = None) -> SequentialAgent:
+def create_blog_agent_system(custom_instruction: str = None, translate_to_english: bool = False) -> SequentialAgent:
     """Creates the complete blog writing agent system with all agents orchestrated.
     
     Args:
         custom_instruction: Optional custom instruction for the BlogWriterAgent
+        translate_to_english: If True, adds a Translator Agent to translate the blog post to English
     """
     
     # Create individual agents
@@ -41,8 +43,8 @@ def create_blog_agent_system(custom_instruction: str = None) -> SequentialAgent:
     # Create link enhancer agent
     link_enhancer = create_link_enhancer_agent()
     
-    # Create description agent
-    description_agent = create_description_agent()
+    # Create description agent (in English if translation is enabled)
+    description_agent = create_description_agent(translate_to_english=translate_to_english)
     
     # Create parallel agent for link enhancement and description generation
     parallel_final_team = ParallelAgent(
@@ -50,17 +52,25 @@ def create_blog_agent_system(custom_instruction: str = None) -> SequentialAgent:
         sub_agents=[link_enhancer, description_agent]
     )
     
+    # Build the list of sub-agents
+    sub_agents = [
+        url_storage,
+        url_fetcher,
+        query_generator,
+        parallel_search_team,
+        blog_writer,
+        parallel_final_team
+    ]
+    
+    # Add translator agent if translation is enabled
+    if translate_to_english:
+        translator_agent = create_translator_agent()
+        sub_agents.append(translator_agent)
+    
     # Create root sequential agent that orchestrates everything
     root_agent = SequentialAgent(
         name="BlogWritingSystem",
-        sub_agents=[
-            url_storage,
-            url_fetcher,
-            query_generator,
-            parallel_search_team,
-            blog_writer,
-            parallel_final_team
-        ]
+        sub_agents=sub_agents
     )
     
     return root_agent

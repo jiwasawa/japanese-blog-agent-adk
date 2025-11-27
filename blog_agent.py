@@ -45,6 +45,11 @@ def main():
         help="Custom instruction to add to the BlogWriterAgent instructions",
         default=None
     )
+    parser.add_argument(
+        "--english",
+        action="store_true",
+        help="Translate the blog post to English"
+    )
     
     args = parser.parse_args()
     
@@ -57,7 +62,7 @@ def main():
     
     # Run the agent system
     import asyncio
-    blog_post, blog_description = asyncio.run(run_blog_agent(args.url, custom_instruction=args.custom))
+    blog_post, blog_description = asyncio.run(run_blog_agent(args.url, custom_instruction=args.custom, translate_to_english=args.english))
     
     # Save the blog post to a file
     output_dir = Path("output")
