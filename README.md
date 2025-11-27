@@ -1,4 +1,4 @@
-# Blog Writing Agent System
+# DeepDraft: The Automated Blog Writer Agent
 
 A multi-agent system built with Google ADK that automatically fetches content from a URL, enriches it with related information from web searches, and generates a comprehensive blog post in Japanese (or English with the `--english` option).
 
