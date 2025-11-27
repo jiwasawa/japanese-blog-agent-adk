@@ -95,14 +95,6 @@ python blog_agent.py <URL> --api-key <your-api-key>
 python blog_agent.py <URL> --save-qmd
 ```
 
-The QMD file will include YAML frontmatter with:
-- Title (extracted from blog post)
-- Description (auto-generated)
-- Author: "Junichiro Iwasawa"
-- Date (current date)
-- Categories: [LLM, AI, Podcast]
-- Image URL
-
 ### Add Custom Instructions
 
 ```bash
