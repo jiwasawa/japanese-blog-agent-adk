@@ -1,6 +1,6 @@
 # Blog Writing Agent System
 
-A multi-agent system built with Google ADK that automatically fetches content from a URL, enriches it with related information from web searches, and generates a comprehensive blog post in Japanese.
+A multi-agent system built with Google ADK that automatically fetches content from a URL, enriches it with related information from web searches, and generates a comprehensive blog post in Japanese (or English with the `--english` option).
 
 ## Features
 
@@ -12,6 +12,7 @@ A multi-agent system built with Google ADK that automatically fetches content fr
 - **Automatic Link Enhancement**: Naturally integrates original and source URLs into the text
 - **Style Emulation**: Follows a specific Japanese technical blog writing style (configurable via `style_reference.md`)
 - **Blog Description Generation**: Automatically generates a one-sentence description for the blog post
+- **English Translation**: Optional translation to English with `--english` flag (translates both blog post and description)
 - **Quarto Support**: Option to save blog posts as Quarto `.qmd` files with YAML frontmatter metadata
 - **Custom Instructions**: Add custom instructions to the BlogWriterAgent via `--custom` argument
 
@@ -24,7 +25,7 @@ blog_agent_adk/
 ├── blog_agent.py      # Main entry point (CLI, file saving)
 ├── config.py          # Configuration settings (retry config)
 ├── tools.py           # Tool definitions (fetch_url_content)
-├── agents.py          # Agent creation functions (7 agents)
+├── agents.py          # Agent creation functions (8 agents)
 ├── orchestration.py   # System orchestration (agent assembly)
 ├── runner.py          # Execution logic (run_blog_agent)
 ├── style_reference.md # Style reference for blog writing
@@ -46,9 +47,10 @@ SequentialAgent (Root)
 │   ├── Search+Summarize Agent 2 (for query 2)
 │   └── Search+Summarize Agent 3 (for query 3)
 ├── Blog Writer Agent (writes final post in Japanese)
-└── ParallelAgent (ParallelFinalTeam)
-    ├── Link Enhancer Agent (adds links to the post)
-    └── Description Agent (generates one-sentence description)
+├── ParallelAgent (ParallelFinalTeam)
+│   ├── Link Enhancer Agent (adds links to the post)
+│   └── Description Agent (generates one-sentence description)
+└── Translator Agent (optional, translates to English when --english is used)
 ```
 
 ### Agent Details
@@ -59,7 +61,8 @@ SequentialAgent (Root)
 - **Search+Summarize Agents** (3 parallel agents): Each performs a Google search and summarizes relevant results with source URLs
 - **Blog Writer Agent**: Combines all content into a comprehensive Japanese blog post following style guidelines
 - **Link Enhancer Agent**: Naturally integrates original URL and search result URLs into the blog post
-- **Description Agent**: Generates a one-sentence Japanese description for the blog post
+- **Description Agent**: Generates a one-sentence description for the blog post (Japanese by default, English when `--english` is used)
+- **Translator Agent**: Translates the Japanese blog post to English while preserving markdown formatting (only added when `--english` is specified)
 
 ## Installation
 
@@ -103,6 +106,25 @@ python blog_agent.py <URL> --custom "Focus on technical details and include code
 
 Custom instructions are inserted into the BlogWriterAgent's instruction set and can be used to modify writing style, focus areas, or add specific requirements.
 
+### Translate to English
+
+```bash
+python blog_agent.py <URL> --english
+```
+
+When `--english` is specified:
+- The blog post is written in Japanese first (as usual)
+- Links are enhanced (as usual)
+- The blog post is translated to English
+- The description is generated in English (instead of Japanese)
+- The final output is in English
+
+### Combined Options
+
+```bash
+python blog_agent.py <URL> --english --save-qmd --custom "Focus on technical details"
+```
+
 ## Output
 
 The system generates files in the `output/` directory:
@@ -126,7 +148,9 @@ Files are named with a timestamp in `YYYYMMDDHHMM` format (e.g., `202511271430.m
 
 6. **Link Enhancer Agent** & **Description Agent** (Parallel): 
    - Link Enhancer naturally integrates the original URL and relevant source links into the blog post
-   - Description Agent generates a one-sentence Japanese description for the blog post
+   - Description Agent generates a one-sentence description (Japanese by default, English when `--english` is used)
+
+7. **Translator Agent** (Optional, when `--english` is specified): Translates the Japanese blog post to English while preserving all markdown formatting, links, and structure. The translation maintains the original tone and style.
 
 ## Configuration
 
@@ -137,7 +161,7 @@ The blog writing style can be customized by editing `style_reference.md`. This f
 ### Models Used
 
 - **Lightweight Agents**: `gemini-2.5-flash-lite` (URL Storage, URL Fetcher, Query Generator, Search+Summarize, Description)
-- **Writer Agents**: `gemini-3-pro-preview` (Blog Writer, Link Enhancer)
+- **Writer Agents**: `gemini-3-pro-preview` (Blog Writer, Link Enhancer, Translator)
 
 ### Retry Configuration
 
@@ -163,7 +187,7 @@ The system generates up to 3 search queries by default. This can be modified in 
 - **`blog_agent.py`**: Main entry point with CLI argument parsing and file saving logic
 - **`config.py`**: Shared configuration (retry settings)
 - **`tools.py`**: Tool definitions (`fetch_url_content` function wrapped as `FunctionTool`)
-- **`agents.py`**: All agent creation functions (7 agents)
+- **`agents.py`**: All agent creation functions (8 agents: URL Storage, URL Fetcher, Query Generator, Search+Summarize x3, Blog Writer, Link Enhancer, Description, Translator)
 - **`orchestration.py`**: Assembles agents into SequentialAgent and ParallelAgent structures
 - **`runner.py`**: Executes the agent system and processes responses
 - **`style_reference.md`**: Example blog post used as style reference (optional)
