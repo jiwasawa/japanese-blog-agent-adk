@@ -9,6 +9,13 @@ from config import retry_config
 from tools import read_link_tool
 
 
+def _sanitize_for_adk(text: str) -> str:
+    """Replace curly braces so ADK won't treat them as template vars."""
+    if not text:
+        return text
+    return text.replace("{", "｛").replace("}", "｝")
+
+
 def create_url_storage_agent() -> Agent:
     """Creates an agent that stores the original URL in session state."""
     return Agent(
@@ -92,21 +99,25 @@ def create_search_summarize_agent(query_index: int) -> Agent:
     )
 
 
-def create_blog_writer_agent(num_summaries: int = 3, custom_instruction: Optional[str] = None) -> Agent:
+def create_blog_writer_agent(num_summaries: int = 3, custom_instruction: Optional[str] = None, style_file: Optional[str] = None) -> Agent:
     """Creates the Blog Writer Agent that combines all content into a final blog post in Japanese.
     
     Args:
         num_summaries: Number of summary outputs to expect (default 3)
         custom_instruction: Optional custom instruction to insert into the final instruction
+        style_file: Optional style reference file name in the script directory
     """
     # Read the style reference file
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    style_reference_path = os.path.join(script_dir, "style_reference.md")
+    if style_file:
+        style_reference_path = os.path.join(script_dir, style_file)
+    else:
+        style_reference_path = os.path.join(script_dir, "style_reference.md")
     
     style_reference_content = ""
     try:
         with open(style_reference_path, 'r', encoding='utf-8') as f:
-            style_reference_content = f.read().strip()
+            style_reference_content = _sanitize_for_adk(f.read().strip())
     except FileNotFoundError:
         pass  # Will handle empty content below
 
@@ -167,7 +178,7 @@ Instructions for writing the blog post:
     
     # Add custom instruction if provided
     if custom_instruction:
-        final_instruction += f"\n\nADDITIONAL COMMENTS:\n{custom_instruction}\n"
+        final_instruction += f"\n\nADDITIONAL COMMENTS:\n{_sanitize_for_adk(custom_instruction)}\n"
     
     # Add the title requirement at the end
     final_instruction += """
@@ -212,7 +223,6 @@ Your task:
    - Maintain the natural flow and readability of the Japanese text
    - Don't over-link - only add links where they genuinely add value and context
    - Links should feel natural and not forced
-   - When adding the original URL, use appropriate Japanese text like "元記事" or "参考記事" or similar
 4. Preserve all the original content and structure of the blog post
 5. Output the enhanced blog post with links integrated naturally
 

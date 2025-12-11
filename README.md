@@ -10,7 +10,7 @@ A multi-agent system built with Google ADK that automatically fetches content fr
 - **Smart Summarization**: Summarizes search results, keeping only relevant information with source URLs
 - **Blog Post Generation**: Combines original content and summaries into a well-structured blog post in Japanese
 - **Automatic Link Enhancement**: Naturally integrates original and source URLs into the text
-- **Style Emulation**: Follows a specific Japanese technical blog writing style (configurable via `style_reference.md`)
+- **Style Emulation**: Follows a specific Japanese technical blog writing style (configurable via `style_reference.md` or custom style file with `--style` option)
 - **Blog Description Generation**: Automatically generates a one-sentence description for the blog post
 - **English Translation**: Optional translation to English with `--english` flag (translates both blog post and description)
 - **Quarto Support**: Option to save blog posts as Quarto `.qmd` files with YAML frontmatter metadata
@@ -106,6 +106,14 @@ python blog_agent.py <URL> --custom "Focus on technical details and include code
 
 Custom instructions are inserted into the BlogWriterAgent's instruction set and can be used to modify writing style, focus areas, or add specific requirements.
 
+### Use Custom Style Reference File
+
+```bash
+python blog_agent.py <URL> --style style_XX.md
+```
+
+The `--style` option allows you to specify a custom style reference file located in the script directory. The file should contain an example blog post that demonstrates the writing style you want the BlogWriterAgent to emulate. If not specified, the system defaults to `style_reference.md`. The style file is used as a reference for tone, structure, and writing patterns.
+
 ### Translate to English
 
 ```bash
@@ -122,7 +130,7 @@ When `--english` is specified:
 ### Combined Options
 
 ```bash
-python blog_agent.py <URL> --english --save-qmd --custom "Focus on technical details"
+python blog_agent.py <URL> --english --save-qmd --custom "Focus on technical details" --style style_XX.md
 ```
 
 ## Output
@@ -156,7 +164,17 @@ Files are named with a timestamp in `YYYYMMDDHHMM` format (e.g., `202511271430.m
 
 ### Style Reference
 
-The blog writing style can be customized by editing `style_reference.md`. This file contains an example blog post that the BlogWriterAgent will emulate. If the file is missing or empty, the system uses built-in fallback style instructions.
+The blog writing style can be customized in two ways:
+
+1. **Default style file**: Edit `style_reference.md` in the script directory. This file contains an example blog post that the BlogWriterAgent will emulate.
+
+2. **Custom style file**: Use the `--style` command-line argument to specify a different style reference file:
+   ```bash
+   python blog_agent.py <URL> --style style_XX.md
+   ```
+   The file must be located in the script directory. The BlogWriterAgent will study this example and emulate its style, tone, and structure.
+
+If the style file is missing or empty, the system uses built-in fallback style instructions. Note: Style files containing LaTeX math expressions (with curly braces) are automatically sanitized to prevent template variable conflicts.
 
 ### Models Used
 
