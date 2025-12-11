@@ -16,6 +16,7 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 from runner import run_blog_agent
+from tools import YouTubeRateLimitError
 
 
 def main():
@@ -35,9 +36,9 @@ def main():
         default=None
     )
     parser.add_argument(
-        "--save-qmd",
+        "--save-md",
         action="store_true",
-        help="Also save the blog post as a Quarto .qmd file with metadata"
+        help="Save the blog post as a Quarto .md file"
     )
     parser.add_argument(
         "--custom",
@@ -49,6 +50,12 @@ def main():
         "--english",
         action="store_true",
         help="Translate the blog post to English"
+    )
+    parser.add_argument(
+        "--style",
+        type=str,
+        help="Style reference file name in the script directory (default: style_reference.md)",
+        default=None
     )
     
     args = parser.parse_args()
@@ -62,7 +69,12 @@ def main():
     
     # Run the agent system
     import asyncio
-    blog_post, blog_description = asyncio.run(run_blog_agent(args.url, custom_instruction=args.custom, translate_to_english=args.english))
+    try:
+        blog_post, blog_description = asyncio.run(run_blog_agent(args.url, custom_instruction=args.custom, translate_to_english=args.english, style_file=args.style))
+    except YouTubeRateLimitError as e:
+        print(f"\nError: {e}")
+        print("\nYouTube has rate-limited this IP address. Please wait a few hours and try again.")
+        sys.exit(1)
     
     # Save the blog post to a file
     output_dir = Path("output")
@@ -73,7 +85,7 @@ def main():
     output_filename = output_dir / f"{timestamp}.md"
     
     # If --save-qmd is specified, also save as .qmd file
-    if args.save_qmd:
+    if not args.save_md:
         # Extract title from first "#" heading and remove it from blog post
         title = "Untitled"
         blog_post_lines = blog_post.split('\n')

@@ -1,3 +1,5 @@
 google-adk
 contextkit
+youtube-transcript-api
+yt-dlp
 

@@ -13,12 +13,13 @@ from agents import (
 )
 
 
-def create_blog_agent_system(custom_instruction: str = None, translate_to_english: bool = False) -> SequentialAgent:
+def create_blog_agent_system(custom_instruction: str = None, translate_to_english: bool = False, style_file: str = None) -> SequentialAgent:
     """Creates the complete blog writing agent system with all agents orchestrated.
     
     Args:
         custom_instruction: Optional custom instruction for the BlogWriterAgent
         translate_to_english: If True, adds a Translator Agent to translate the blog post to English
+        style_file: Optional style reference file name in the script directory
     """
     
     # Create individual agents
@@ -38,7 +39,7 @@ def create_blog_agent_system(custom_instruction: str = None, translate_to_englis
     )
     
     # Create blog writer agent
-    blog_writer = create_blog_writer_agent(num_summaries=3, custom_instruction=custom_instruction)
+    blog_writer = create_blog_writer_agent(num_summaries=3, custom_instruction=custom_instruction, style_file=style_file)
     
     # Create link enhancer agent
     link_enhancer = create_link_enhancer_agent()

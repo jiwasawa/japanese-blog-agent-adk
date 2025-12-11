@@ -5,19 +5,20 @@ from google.adk.runners import InMemoryRunner
 from orchestration import create_blog_agent_system
 
 
-async def run_blog_agent(url: str, custom_instruction: str = None, translate_to_english: bool = False) -> Tuple[str, str]:
+async def run_blog_agent(url: str, custom_instruction: str = None, translate_to_english: bool = False, style_file: str = None) -> Tuple[str, str]:
     """Runs the blog writing agent system for a given URL.
     
     Args:
         url: The URL to fetch content from
         custom_instruction: Optional custom instruction for the BlogWriterAgent
         translate_to_english: If True, translates the blog post to English
+        style_file: Optional style reference file name in the script directory
     
     Returns:
         Tuple of (final_blog_post, blog_description) as strings
     """
     # Create the agent system
-    root_agent = create_blog_agent_system(custom_instruction=custom_instruction, translate_to_english=translate_to_english)
+    root_agent = create_blog_agent_system(custom_instruction=custom_instruction, translate_to_english=translate_to_english, style_file=style_file)
     
     # Create runner
     runner = InMemoryRunner(agent=root_agent)
