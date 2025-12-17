@@ -3,7 +3,7 @@
 Blog Writing Agent System using Google ADK
 
 This script creates a multi-agent system that:
-1. Fetches content from a URL using contextkit
+1. Fetches content from a URL or local PDF file using contextkit
 2. Generates search queries related to the content
 3. Performs parallel Google searches
 4. Summarizes search results
@@ -22,12 +22,12 @@ from tools import YouTubeRateLimitError
 def main():
     """Main entry point for the script."""
     parser = argparse.ArgumentParser(
-        description="Blog Writing Agent System - Fetches URL content and writes an enriched blog post"
+        description="Blog Writing Agent System - Fetches URL or PDF content and writes an enriched blog post"
     )
     parser.add_argument(
         "url",
         type=str,
-        help="The URL to fetch content from and write a blog post about"
+        help="The URL or local PDF file path to fetch content from and write a blog post about"
     )
     parser.add_argument(
         "--api-key",

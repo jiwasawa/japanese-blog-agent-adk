@@ -1,15 +1,16 @@
 """Tool definitions for the blog agent system.
 
-This module provides tools for fetching content from URLs, with special handling
-for YouTube URLs to extract video transcripts.
+This module provides tools for fetching content from URLs or local PDF files,
+with special handling for YouTube URLs to extract video transcripts.
 """
 
+import os
 import time
 from typing import Optional
 from urllib.parse import urlparse, parse_qs
 
 from google.adk.tools import FunctionTool
-from contextkit.read import read_link
+from contextkit.read import read_link, read_pdf
 
 # Optional imports for YouTube transcript fetching
 try:
@@ -51,6 +52,15 @@ def _check_and_raise_rate_limit(error_str: str) -> None:
         raise YouTubeRateLimitError(
             "YouTube rate limit hit (429). Please wait and try again later."
         )
+
+
+# =============================================================================
+# Input Type Detection Helpers
+# =============================================================================
+
+def _is_local_pdf_path(input_str: str) -> bool:
+    """Check if the input is a local PDF file path."""
+    return os.path.exists(input_str) and input_str.lower().endswith('.pdf')
 
 
 # =============================================================================
@@ -351,14 +361,14 @@ def _fetch_youtube_transcript(video_id: str, max_retries: int = 3) -> str:
 
 def fetch_url_content(url: str, heavy: bool = False, sel: Optional[str] = None, 
                       useJina: bool = False, ignore_links: bool = False) -> dict:
-    """Fetch content from a URL. For YouTube URLs, fetches the video transcript.
+    """Fetch content from a URL or local PDF file. For YouTube URLs, fetches the video transcript.
     
     Args:
-        url: The URL to fetch content from
-        heavy: Use headless browser (for dynamic pages)
-        sel: CSS selector to extract specific content
-        useJina: Use Jina for markdown conversion
-        ignore_links: Strip links from the content
+        url: The URL to fetch content from, or a local path to a PDF file
+        heavy: Use headless browser (for dynamic pages, ignored for PDFs)
+        sel: CSS selector to extract specific content (ignored for PDFs)
+        useJina: Use Jina for markdown conversion (ignored for PDFs)
+        ignore_links: Strip links from the content (ignored for PDFs)
     
     Returns:
         Dictionary with status and content:
@@ -369,7 +379,11 @@ def fetch_url_content(url: str, heavy: bool = False, sel: Optional[str] = None,
         YouTubeRateLimitError: If YouTube rate limits the request (propagates up)
     """
     try:
-        if _is_youtube_url(url):
+        if _is_local_pdf_path(url):
+            # Handle local PDF files
+            content = read_pdf(url)
+            content = _sanitize_for_adk(content)
+        elif _is_youtube_url(url):
             video_id = _extract_video_id(url)
             if not video_id:
                 return {
@@ -400,7 +414,7 @@ def fetch_url_content(url: str, heavy: bool = False, sel: Optional[str] = None,
     except Exception as e:
         return {
             "status": "error",
-            "error_message": f"Failed to fetch URL content: {str(e)}"
+            "error_message": f"Failed to fetch content: {str(e)}"
         }
 
 

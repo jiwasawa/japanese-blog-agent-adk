@@ -6,10 +6,10 @@ from orchestration import create_blog_agent_system
 
 
 async def run_blog_agent(url: str, custom_instruction: str = None, translate_to_english: bool = False, style_file: str = None) -> Tuple[str, str]:
-    """Runs the blog writing agent system for a given URL.
+    """Runs the blog writing agent system for a given URL or local PDF file.
     
     Args:
-        url: The URL to fetch content from
+        url: The URL or local PDF file path to fetch content from
         custom_instruction: Optional custom instruction for the BlogWriterAgent
         translate_to_english: If True, translates the blog post to English
         style_file: Optional style reference file name in the script directory
@@ -23,8 +23,8 @@ async def run_blog_agent(url: str, custom_instruction: str = None, translate_to_
     # Create runner
     runner = InMemoryRunner(agent=root_agent)
     
-    # Run the agent with the URL
-    print(f"Starting blog generation for URL: {url}")
+    # Run the agent with the URL or PDF path
+    print(f"Starting blog generation for: {url}")
     print("This may take a few minutes as the agents fetch content, search, and write...\n")
     
     response = await runner.run_debug(f"Fetch content from this URL and write a blog post: {url}")
