@@ -33,19 +33,26 @@ def create_url_storage_agent() -> Agent:
 
 
 def create_url_fetcher_agent() -> Agent:
-    """Creates the URL Fetcher Agent that fetches content from a URL."""
+    """Creates the URL Fetcher Agent that fetches content from a URL or local PDF file."""
     return Agent(
         name="URLFetcherAgent",
         model=Gemini(
             model="gemini-2.5-flash-lite",
             retry_options=retry_config
         ),
-        instruction="""You are a URL content fetcher. Your job is to:
-1. Use the fetch_url_content tool to retrieve content from the URL provided by the user
-2. Check the "status" field in the tool response
-3. If status is "error", inform the user about the error
-4. If status is "success", present the fetched content clearly
-5. Make sure to preserve the full content as it will be used by subsequent agents""",
+        instruction="""You are a content fetcher. Your job is to:
+1. ALWAYS use the fetch_url_content tool to retrieve content - the tool supports BOTH web URLs AND local PDF file paths
+2. The tool can handle:
+   - Web URLs (http://, https://)
+   - Local PDF file paths (e.g., /path/to/file.pdf)
+   - File URIs (file:///path/to/file.pdf)
+3. Do NOT assume you cannot access local files - the tool has local file access capabilities
+4. Check the "status" field in the tool response
+5. If status is "error", inform the user about the error
+6. If status is "success", present the fetched content clearly
+7. Make sure to preserve the full content as it will be used by subsequent agents
+
+IMPORTANT: Always call the fetch_url_content tool regardless of whether the input looks like a URL or a local path. Never refuse to try fetching content.""",
         tools=[read_link_tool],
         output_key="url_content"
     )

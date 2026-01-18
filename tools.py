@@ -58,9 +58,22 @@ def _check_and_raise_rate_limit(error_str: str) -> None:
 # Input Type Detection Helpers
 # =============================================================================
 
+def _strip_file_uri_prefix(input_str: str) -> str:
+    """Strip 'file://' or 'file:///' prefix from a URI if present."""
+    if input_str.startswith('file:///'):
+        return input_str[7:]  # Remove 'file://' (keep the leading /)
+    elif input_str.startswith('file://'):
+        return input_str[7:]
+    return input_str
+
+
 def _is_local_pdf_path(input_str: str) -> bool:
-    """Check if the input is a local PDF file path."""
-    return os.path.exists(input_str) and input_str.lower().endswith('.pdf')
+    """Check if the input is a local PDF file path.
+    
+    Handles both direct paths and file:// URIs.
+    """
+    path = _strip_file_uri_prefix(input_str)
+    return os.path.exists(path) and path.lower().endswith('.pdf')
 
 
 # =============================================================================
@@ -380,8 +393,9 @@ def fetch_url_content(url: str, heavy: bool = False, sel: Optional[str] = None,
     """
     try:
         if _is_local_pdf_path(url):
-            # Handle local PDF files
-            content = read_pdf(url)
+            # Handle local PDF files (strip file:// prefix if present)
+            pdf_path = _strip_file_uri_prefix(url)
+            content = read_pdf(pdf_path)
             content = _sanitize_for_adk(content)
         elif _is_youtube_url(url):
             video_id = _extract_video_id(url)
