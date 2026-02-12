@@ -7,7 +7,7 @@ with special handling for YouTube URLs to extract video transcripts.
 import os
 import time
 from typing import Optional
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, unquote
 
 from google.adk.tools import FunctionTool
 from contextkit.read import read_link, read_pdf
@@ -59,11 +59,14 @@ def _check_and_raise_rate_limit(error_str: str) -> None:
 # =============================================================================
 
 def _strip_file_uri_prefix(input_str: str) -> str:
-    """Strip 'file://' or 'file:///' prefix from a URI if present."""
+    """Strip 'file://' or 'file:///' prefix from a URI if present.
+
+    Also URL-decodes the path (e.g., %20 -> space) so it matches the actual filesystem path.
+    """
     if input_str.startswith('file:///'):
-        return input_str[7:]  # Remove 'file://' (keep the leading /)
+        return unquote(input_str[7:])  # Remove 'file://' (keep the leading /) and decode
     elif input_str.startswith('file://'):
-        return input_str[7:]
+        return unquote(input_str[7:])
     return input_str
 
 
