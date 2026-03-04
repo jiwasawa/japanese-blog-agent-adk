@@ -21,7 +21,7 @@ def create_url_storage_agent() -> Agent:
     return Agent(
         name="URLStorageAgent",
         model=Gemini(
-            model="gemini-2.5-flash-lite",
+            model="gemini-3.1-flash-lite-preview",
             retry_options=retry_config
         ),
         instruction="""You are a URL storage agent. Your job is simple:
@@ -37,7 +37,7 @@ def create_url_fetcher_agent() -> Agent:
     return Agent(
         name="URLFetcherAgent",
         model=Gemini(
-            model="gemini-2.5-flash-lite",
+            model="gemini-3.1-flash-lite-preview",
             retry_options=retry_config
         ),
         instruction="""You are a content fetcher. Your job is to:
@@ -63,7 +63,7 @@ def create_query_generator_agent() -> Agent:
     return Agent(
         name="QueryGeneratorAgent",
         model=Gemini(
-            model="gemini-2.5-flash-lite",
+            model="gemini-3.1-flash-lite-preview",
             retry_options=retry_config
         ),
         instruction="""You are a search query generator. Your job is to:
@@ -86,7 +86,7 @@ def create_search_summarize_agent(query_index: int) -> Agent:
     return Agent(
         name=f"SearchSummarizeAgent{query_index}",
         model=Gemini(
-            model="gemini-2.5-flash-lite",
+            model="gemini-3.1-flash-lite-preview",
             retry_options=retry_config
         ),
         instruction=f"""You are a search and summarization specialist. Your job is to:
@@ -194,7 +194,7 @@ IMPORTANT: You MUST start your blog post with a title using a single "#" heading
     return Agent(
         name="BlogWriterAgent",
         model=Gemini(
-            model="gemini-3-pro-preview",  #"gemini-2.5-pro", "gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",  #"gemini-2.5-pro", "gemini-3-pro-preview",
             retry_options=retry_config
         ),
         instruction=final_instruction,
@@ -207,7 +207,7 @@ def create_link_enhancer_agent() -> Agent:
     return Agent(
         name="LinkEnhancerAgent",
         model=Gemini(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             retry_options=retry_config
         ),
         instruction="""You are a link enhancement specialist. Your job is to naturally add links to a blog post.
@@ -284,7 +284,7 @@ Your task:
     return Agent(
         name="DescriptionAgent",
         model=Gemini(
-            model="gemini-2.5-flash-lite",
+            model="gemini-3.1-flash-lite-preview",
             retry_options=retry_config
         ),
         instruction=instruction,
@@ -297,7 +297,7 @@ def create_translator_agent() -> Agent:
     return Agent(
         name="TranslatorAgent",
         model=Gemini(
-            model="gemini-3-pro-preview",
+            model="gemini-3.1-pro-preview",
             retry_options=retry_config
         ),
         instruction="""You are a professional translator specializing in technical blog posts. Your job is to translate a Japanese blog post to English while preserving all formatting, structure, and meaning.
