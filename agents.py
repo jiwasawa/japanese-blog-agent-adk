@@ -21,7 +21,7 @@ def create_url_storage_agent() -> Agent:
     return Agent(
         name="URLStorageAgent",
         model=Gemini(
-            model="gemini-3.1-flash-lite-preview",
+            model="gemini-2.5-flash-lite",
             retry_options=retry_config
         ),
         instruction="""You are a URL storage agent. Your job is simple:
@@ -37,7 +37,7 @@ def create_url_fetcher_agent() -> Agent:
     return Agent(
         name="URLFetcherAgent",
         model=Gemini(
-            model="gemini-3.1-flash-lite-preview",
+            model="gemini-2.5-flash-lite",
             retry_options=retry_config
         ),
         instruction="""You are a content fetcher. Your job is to:
@@ -63,7 +63,7 @@ def create_query_generator_agent() -> Agent:
     return Agent(
         name="QueryGeneratorAgent",
         model=Gemini(
-            model="gemini-3.1-flash-lite-preview",
+            model="gemini-2.5-flash-lite",
             retry_options=retry_config
         ),
         instruction="""You are a search query generator. Your job is to:
@@ -86,7 +86,7 @@ def create_search_summarize_agent(query_index: int) -> Agent:
     return Agent(
         name=f"SearchSummarizeAgent{query_index}",
         model=Gemini(
-            model="gemini-3.1-flash-lite-preview",
+            model="gemini-2.5-flash-lite",
             retry_options=retry_config
         ),
         instruction=f"""You are a search and summarization specialist. Your job is to:
@@ -284,7 +284,7 @@ Your task:
     return Agent(
         name="DescriptionAgent",
         model=Gemini(
-            model="gemini-3.1-flash-lite-preview",
+            model="gemini-2.5-flash-lite",
             retry_options=retry_config
         ),
         instruction=instruction,
