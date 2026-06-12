@@ -13,14 +13,22 @@ This script creates a multi-agent system that:
 import os
 import sys
 import argparse
+import subprocess
 from datetime import datetime
 from pathlib import Path
+from typing import Callable, Optional, Tuple
+
 from runner import run_blog_agent
 from tools import YouTubeRateLimitError
 
 
-def main():
-    """Main entry point for the script."""
+DEFAULT_QMD_IMAGE = "https://picsum.photos/id/92/200"
+THUMBNAIL_WIDTH = 600
+THUMBNAIL_HEIGHT = 600
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the command-line parser for the blog agent."""
     parser = argparse.ArgumentParser(
         description="Blog Writing Agent System - Fetches URL or PDF content and writes an enriched blog post"
     )
@@ -57,9 +65,236 @@ def main():
         help="Style reference file name in the script directory (default: style_reference.md)",
         default=None
     )
-    
+    parser.add_argument(
+        "--no-thumbnail",
+        action="store_true",
+        help="Skip automatic Codex thumbnail generation for Quarto QMD output"
+    )
+    return parser
+
+
+def _replace_frontmatter_image(qmd_content: str, image_ref: str) -> str:
+    """Return QMD content with the YAML frontmatter image field set."""
+    lines = qmd_content.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return qmd_content
+
+    frontmatter_end = None
+    for index, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            frontmatter_end = index
+            break
+
+    if frontmatter_end is None:
+        return qmd_content
+
+    image_line = f"image: {image_ref}\n"
+    for index in range(1, frontmatter_end):
+        if lines[index].lstrip().startswith("image:"):
+            lines[index] = image_line
+            return "".join(lines)
+
+    lines.insert(frontmatter_end, image_line)
+    return "".join(lines)
+
+
+def _relative_posix_path(path: Path, start: Path) -> str:
+    """Return a path relative to start when possible, using POSIX separators."""
+    try:
+        return path.resolve().relative_to(start.resolve()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def build_thumbnail_prompt(qmd_path: Path, thumbnail_path: Path, workspace_dir: Path) -> str:
+    """Build instructions for Codex thumbnail generation from a QMD file."""
+    qmd_display_path = _relative_posix_path(qmd_path, workspace_dir)
+    thumbnail_display_path = _relative_posix_path(thumbnail_path, workspace_dir)
+
+    return f"""Read `{qmd_display_path}` and generate one thumbnail image for this Quarto blog post.
+Full QMD path: `{qmd_path}`.
+
+Use the ImageGen skill if it is available. The image must be based on the QMD title,
+description, and article body.
+
+Requirements:
+- Save the final PNG exactly at `{thumbnail_display_path}`.
+- Create the parent directory if it does not exist.
+- Use a square 1:1 composition suitable for a technical blog thumbnail.
+- Style it as a high-end scientific journal cover or research editorial illustration, closer to Nature or Science cover imagery than a cinematic tech poster.
+- Convey the article's core idea through precise scientific visual storytelling: layered diagrams, clean microscopy- or materials-inspired detail, measured depth, and a polished academic composition.
+- Use a refined scientific palette with restrained contrast, clear focal structure, and credible textures rather than stock-photo, marketing, or sci-fi game aesthetics.
+- Do not include text, logos, watermarks, UI chrome, or fake article headlines.
+- Do not modify the QMD file or any other project file.
+
+If the ImageGen skill or image generation is unavailable, do not create a placeholder.
+Report the failure clearly.
+"""
+
+
+def resize_thumbnail(
+    thumbnail_path: Path,
+    width: int = THUMBNAIL_WIDTH,
+    height: int = THUMBNAIL_HEIGHT,
+    runner: Callable = subprocess.run,
+    printer: Callable[[str], None] = print,
+) -> bool:
+    """Resize the thumbnail to the configured web-friendly dimensions."""
+    dimensions = read_image_dimensions(thumbnail_path, runner=runner, printer=printer)
+    if dimensions:
+        source_width, source_height = dimensions
+        square_size = min(source_width, source_height)
+        crop_cmd = [
+            "sips",
+            "--cropToHeightWidth",
+            str(square_size),
+            str(square_size),
+            str(thumbnail_path),
+        ]
+        if not run_image_command(crop_cmd, "Thumbnail square crop", runner, printer):
+            return False
+
+    cmd = ["sips", "-z", str(height), str(width), str(thumbnail_path)]
+    return run_image_command(cmd, "Thumbnail resize", runner, printer)
+
+
+def read_image_dimensions(
+    thumbnail_path: Path,
+    runner: Callable = subprocess.run,
+    printer: Callable[[str], None] = print,
+) -> Optional[Tuple[int, int]]:
+    """Return image dimensions from sips, or None if they cannot be read."""
+    cmd = ["sips", "-g", "pixelWidth", "-g", "pixelHeight", str(thumbnail_path)]
+    try:
+        result = runner(
+            cmd,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        printer("Warning: sips not found. Keeping generated thumbnail at original size.")
+        return None
+    except Exception as exc:
+        printer(f"Warning: Thumbnail dimension check failed to start: {exc}")
+        return None
+
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "no details"
+        printer(f"Warning: Thumbnail dimension check failed: {detail}")
+        return None
+
+    width = None
+    height = None
+    for line in result.stdout.splitlines():
+        if "pixelWidth:" in line:
+            width = int(line.rsplit(":", 1)[1].strip())
+        elif "pixelHeight:" in line:
+            height = int(line.rsplit(":", 1)[1].strip())
+
+    if width is None or height is None:
+        printer("Warning: Thumbnail dimensions were not found in sips output.")
+        return None
+
+    return width, height
+
+
+def run_image_command(
+    cmd: list,
+    label: str,
+    runner: Callable,
+    printer: Callable[[str], None],
+) -> bool:
+    """Run an image-processing command and report non-fatal failures."""
+    try:
+        result = runner(
+            cmd,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        printer("Warning: sips not found. Keeping generated thumbnail at original size.")
+        return False
+    except Exception as exc:
+        printer(f"Warning: {label} failed to start: {exc}")
+        return False
+
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "no details"
+        printer(f"Warning: {label} failed: {detail}")
+        return False
+
+    return True
+
+
+def generate_thumbnail_with_codex(
+    qmd_path: Path,
+    workspace_dir: Optional[Path] = None,
+    codex_bin: str = "codex",
+    runner: Callable = subprocess.run,
+    printer: Callable[[str], None] = print,
+) -> bool:
+    """Generate a blog thumbnail with Codex and update QMD frontmatter on success."""
+    qmd_path = Path(qmd_path)
+    workspace_dir = Path(workspace_dir) if workspace_dir else Path(__file__).resolve().parent
+    thumbnail_path = qmd_path.parent / f"{qmd_path.stem}.png"
+    image_ref = f"{qmd_path.stem}.png"
+
+    prompt = build_thumbnail_prompt(qmd_path, thumbnail_path, workspace_dir)
+    cmd = [
+        codex_bin,
+        "exec",
+        "-C",
+        str(workspace_dir),
+        "--sandbox",
+        "danger-full-access",
+        "-",
+    ]
+
+    try:
+        result = runner(
+            cmd,
+            input=prompt,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        printer("Warning: codex CLI not found. Skipping thumbnail generation.")
+        return False
+    except Exception as exc:
+        printer(f"Warning: Codex thumbnail generation failed to start: {exc}")
+        return False
+
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "no details"
+        printer(f"Warning: Codex thumbnail generation failed: {detail}")
+        return False
+
+    if not thumbnail_path.exists():
+        printer(
+            "Warning: Codex completed but did not create the expected thumbnail: "
+            f"{thumbnail_path}"
+        )
+        return False
+
+    resize_thumbnail(thumbnail_path, runner=runner, printer=printer)
+
+    qmd_content = qmd_path.read_text(encoding="utf-8")
+    qmd_path.write_text(
+        _replace_frontmatter_image(qmd_content, image_ref),
+        encoding="utf-8",
+    )
+    printer(f"Thumbnail image saved to: {thumbnail_path}")
+    return True
+
+
+def main():
+    """Main entry point for the script."""
+    parser = build_parser()
     args = parser.parse_args()
-    
+
     # Set up API key
     if args.api_key:
         os.environ["GOOGLE_API_KEY"] = args.api_key
@@ -84,7 +319,7 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d%H%M")
     output_filename = output_dir / f"{timestamp}.md"
     
-    # If --save-qmd is specified, also save as .qmd file
+    # Save QMD by default; --save-md keeps the legacy Markdown-only output.
     if not args.save_md:
         # Extract title from first "#" heading and remove it from blog post
         title = "Untitled"
@@ -122,7 +357,7 @@ description: "{description_escaped}"
 author: "Junichiro Iwasawa"
 date: "{current_date}"
 categories: [LLM, AI, Podcast]
-image: https://picsum.photos/id/92/200
+image: {DEFAULT_QMD_IMAGE}
 ---
 
 {blog_post_cleaned}
@@ -134,6 +369,11 @@ image: https://picsum.photos/id/92/200
             f.write(qmd_content)
         
         print(f"Quarto QMD file saved to: {qmd_filename}")
+
+        if args.no_thumbnail:
+            print("Thumbnail generation skipped (--no-thumbnail).")
+        else:
+            generate_thumbnail_with_codex(qmd_filename)
     else:
         # Save the blog post
         with open(output_filename, 'w', encoding='utf-8') as f:
