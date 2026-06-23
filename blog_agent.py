@@ -10,10 +10,15 @@ This script creates a multi-agent system that:
 5. Writes a final blog post
 """
 
-import os
-import sys
 import argparse
+import base64
+import binascii
+import json
+import os
+import random
 import subprocess
+import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional, Tuple
@@ -25,6 +30,32 @@ from tools import YouTubeRateLimitError
 DEFAULT_QMD_IMAGE = "https://picsum.photos/id/92/200"
 THUMBNAIL_WIDTH = 600
 THUMBNAIL_HEIGHT = 600
+THUMBNAIL_EXTENSION = "jpg"
+THUMBNAIL_FORMAT = "jpeg"
+
+
+# Artist styles are rotated uniformly to maximize thumbnail diversity.
+# Keep visually distinctive painters whose aesthetics still adapt well to a
+# restrained, refined scientific palette.
+THUMBNAIL_ARTIST_STYLES: Tuple[str, ...] = (
+    "Pablo Picasso",
+    "Claude Monet",
+    "Paul Cézanne",
+    "Wassily Kandinsky",
+    "Henri Matisse",
+    "Paul Klee",
+    "Vincent van Gogh",
+    "Piet Mondrian",
+    "Joan Miró",
+    "Georgia O'Keeffe",
+)
+
+
+def select_thumbnail_style(style_rng: Callable[[], float] = random.random) -> str:
+    """Select one thumbnail artist style using a uniform rotation over the roster."""
+    styles = THUMBNAIL_ARTIST_STYLES
+    index = min(int(style_rng() * len(styles)), len(styles) - 1)
+    return styles[index]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -106,10 +137,17 @@ def _relative_posix_path(path: Path, start: Path) -> str:
         return path.as_posix()
 
 
-def build_thumbnail_prompt(qmd_path: Path, thumbnail_path: Path, workspace_dir: Path) -> str:
+def build_thumbnail_prompt(
+    qmd_path: Path,
+    thumbnail_path: Path,
+    workspace_dir: Path,
+    style_rng: Callable[[], float] = random.random,
+    artist_style: Optional[str] = None,
+) -> str:
     """Build instructions for Codex thumbnail generation from a QMD file."""
     qmd_display_path = _relative_posix_path(qmd_path, workspace_dir)
     thumbnail_display_path = _relative_posix_path(thumbnail_path, workspace_dir)
+    artist_style = artist_style or select_thumbnail_style(style_rng)
 
     return f"""Read `{qmd_display_path}` and generate one thumbnail image for this Quarto blog post.
 Full QMD path: `{qmd_path}`.
@@ -118,16 +156,28 @@ Use the ImageGen skill if it is available. The image must be based on the QMD ti
 description, and article body.
 
 Requirements:
-- Save the final PNG exactly at `{thumbnail_display_path}`.
+- Save the final JPEG exactly at `{thumbnail_display_path}`.
 - Create the parent directory if it does not exist.
+- The final JPEG must originate from a fresh new ImageGen artifact created during this Codex run.
+- After ImageGen returns, move or copy the selected fresh generated image into
+  `{thumbnail_display_path}`; do not leave it only as an inline preview or only
+  under `$CODEX_HOME`.
+- If built-in ImageGen cannot expose a local file you can copy and `OPENAI_API_KEY`
+  is already set, this prompt explicitly authorizes the ImageGen CLI fallback to
+  generate a fresh image file at `{thumbnail_display_path}`. Do not ask for an
+  API key during this automated run.
+- Before using ImageGen output, ignore any image files that existed before this run started.
+- Do not reuse, copy, resize, or convert images from previous runs.
+- Do not convert or copy any pre-existing image from `$CODEX_HOME/generated_images`,
+  `~/.codex/generated_images`, `output/`, or any other directory.
 - Use a square 1:1 composition suitable for a technical blog thumbnail.
-- Style it as a high-end scientific journal cover or research editorial illustration, closer to Nature or Science cover imagery than a cinematic tech poster.
-- Convey the article's core idea through precise scientific visual storytelling: layered diagrams, clean microscopy- or materials-inspired detail, measured depth, and a polished academic composition.
+- Generate the image in the style of {artist_style}. Apply only the selected artist style, but do not make it too explicit.
 - Use a refined scientific palette with restrained contrast, clear focal structure, and credible textures rather than stock-photo, marketing, or sci-fi game aesthetics.
 - Do not include text, logos, watermarks, UI chrome, or fake article headlines.
 - Do not modify the QMD file or any other project file.
 
-If the ImageGen skill or image generation is unavailable, do not create a placeholder.
+If the ImageGen skill or fresh image generation is unavailable, do not create a placeholder
+or reuse an old image.
 Report the failure clearly.
 """
 
@@ -155,7 +205,24 @@ def resize_thumbnail(
             return False
 
     cmd = ["sips", "-z", str(height), str(width), str(thumbnail_path)]
-    return run_image_command(cmd, "Thumbnail resize", runner, printer)
+    if not run_image_command(cmd, "Thumbnail resize", runner, printer):
+        return False
+
+    convert_cmd = [
+        "sips",
+        "-s",
+        "format",
+        THUMBNAIL_FORMAT,
+        str(thumbnail_path),
+        "--out",
+        str(thumbnail_path),
+    ]
+    return run_image_command(
+        convert_cmd,
+        "Thumbnail JPEG conversion",
+        runner,
+        printer,
+    )
 
 
 def read_image_dimensions(
@@ -228,23 +295,184 @@ def run_image_command(
     return True
 
 
+def _decode_imagegen_result(result: str) -> Optional[bytes]:
+    """Decode an ImageGen base64 payload from a Codex JSON event."""
+    if not result:
+        return None
+
+    payload = result.strip()
+    if payload.startswith("data:") and "," in payload:
+        payload = payload.split(",", 1)[1]
+
+    try:
+        return base64.b64decode(payload, validate=True)
+    except (binascii.Error, ValueError):
+        return None
+
+
+def _imagegen_result_from_codex_jsonl_text(jsonl_text: str) -> Optional[Tuple[bytes, str]]:
+    """Return the latest ImageGen payload found in Codex JSONL output."""
+    latest_result = None
+
+    for line in jsonl_text.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        if payload.get("type") != "image_generation_end":
+            continue
+
+        image_bytes = _decode_imagegen_result(payload.get("result", ""))
+        if image_bytes:
+            call_id = payload.get("call_id") or "unknown call"
+            latest_result = (image_bytes, f"Codex JSON event stream ({call_id})")
+
+    return latest_result
+
+
+def _imagegen_result_from_codex_session_file(
+    session_file: Path,
+    target_markers: Tuple[str, ...],
+) -> Optional[Tuple[bytes, str, bool]]:
+    """Return the latest ImageGen payload from one Codex session file."""
+    latest_result = None
+    mentions_target = False
+
+    try:
+        with session_file.open(encoding="utf-8") as handle:
+            for line in handle:
+                if any(marker and marker in line for marker in target_markers):
+                    mentions_target = True
+
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                payload = event.get("payload")
+                if not isinstance(payload, dict):
+                    continue
+                if payload.get("type") != "image_generation_end":
+                    continue
+
+                image_bytes = _decode_imagegen_result(payload.get("result", ""))
+                if image_bytes:
+                    latest_result = image_bytes
+    except OSError:
+        return None
+
+    if not latest_result:
+        return None
+
+    return latest_result, str(session_file), mentions_target
+
+
+def _imagegen_result_from_fresh_codex_sessions(
+    thumbnail_path: Path,
+    workspace_dir: Path,
+    started_at: float,
+) -> Optional[Tuple[bytes, str]]:
+    """Find a fresh ImageGen payload in persisted Codex session logs."""
+    codex_home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
+    sessions_dir = codex_home / "sessions"
+    if not sessions_dir.exists():
+        return None
+
+    target_markers = (
+        str(thumbnail_path),
+        thumbnail_path.as_posix(),
+        _relative_posix_path(thumbnail_path, workspace_dir),
+    )
+    session_files = []
+    cutoff = started_at - 5
+    for session_file in sessions_dir.rglob("*.jsonl"):
+        try:
+            modified_at = session_file.stat().st_mtime
+        except OSError:
+            continue
+        if modified_at >= cutoff:
+            session_files.append((modified_at, session_file))
+
+    fallback = None
+    for _, session_file in sorted(
+        session_files,
+        key=lambda session: session[0],
+        reverse=True,
+    ):
+        result = _imagegen_result_from_codex_session_file(session_file, target_markers)
+        if not result:
+            continue
+
+        image_bytes, source, mentions_target = result
+        if mentions_target:
+            return image_bytes, f"Codex session log {source}"
+        if fallback is None:
+            fallback = (image_bytes, f"Codex session log {source}")
+
+    return fallback
+
+
+def _recover_thumbnail_from_codex_output(
+    result: subprocess.CompletedProcess,
+    thumbnail_path: Path,
+    workspace_dir: Path,
+    started_at: float,
+    printer: Callable[[str], None],
+) -> bool:
+    """Recover a fresh ImageGen image when Codex did not write the target file."""
+    recovered = _imagegen_result_from_codex_jsonl_text(result.stdout or "")
+    if not recovered:
+        recovered = _imagegen_result_from_fresh_codex_sessions(
+            thumbnail_path,
+            workspace_dir,
+            started_at,
+        )
+
+    if not recovered:
+        return False
+
+    image_bytes, source = recovered
+    thumbnail_path.parent.mkdir(parents=True, exist_ok=True)
+    thumbnail_path.write_bytes(image_bytes)
+    printer(f"Recovered fresh ImageGen artifact from {source}: {thumbnail_path}")
+    return True
+
+
 def generate_thumbnail_with_codex(
     qmd_path: Path,
     workspace_dir: Optional[Path] = None,
     codex_bin: str = "codex",
     runner: Callable = subprocess.run,
     printer: Callable[[str], None] = print,
+    style_rng: Callable[[], float] = random.random,
+    artist_style: Optional[str] = None,
 ) -> bool:
-    """Generate a blog thumbnail with Codex and update QMD frontmatter on success."""
+    """Generate a blog thumbnail with Codex and update QMD frontmatter on success.
+
+    When ``artist_style`` is provided it is used verbatim; otherwise a style is
+    selected from ``THUMBNAIL_ARTIST_STYLES`` using ``style_rng``.
+    """
     qmd_path = Path(qmd_path)
     workspace_dir = Path(workspace_dir) if workspace_dir else Path(__file__).resolve().parent
-    thumbnail_path = qmd_path.parent / f"{qmd_path.stem}.png"
-    image_ref = f"{qmd_path.stem}.png"
+    image_ref = f"{qmd_path.stem}.{THUMBNAIL_EXTENSION}"
+    thumbnail_path = qmd_path.parent / image_ref
+    artist_style = artist_style or select_thumbnail_style(style_rng)
+    printer(f"{artist_style = }")
 
-    prompt = build_thumbnail_prompt(qmd_path, thumbnail_path, workspace_dir)
+    prompt = build_thumbnail_prompt(
+        qmd_path,
+        thumbnail_path,
+        workspace_dir,
+        artist_style=artist_style,
+    )
     cmd = [
         codex_bin,
         "exec",
+        "--json",
         "-C",
         str(workspace_dir),
         "--sandbox",
@@ -252,6 +480,7 @@ def generate_thumbnail_with_codex(
         "-",
     ]
 
+    codex_started_at = time.time()
     try:
         result = runner(
             cmd,
@@ -271,6 +500,15 @@ def generate_thumbnail_with_codex(
         detail = result.stderr.strip() or result.stdout.strip() or "no details"
         printer(f"Warning: Codex thumbnail generation failed: {detail}")
         return False
+
+    if not thumbnail_path.exists():
+        _recover_thumbnail_from_codex_output(
+            result,
+            thumbnail_path,
+            workspace_dir,
+            codex_started_at,
+            printer,
+        )
 
     if not thumbnail_path.exists():
         printer(
