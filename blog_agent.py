@@ -44,10 +44,8 @@ THUMBNAIL_ARTIST_STYLES: Tuple[str, ...] = (
     "Wassily Kandinsky",
     "Henri Matisse",
     "Paul Klee",
-    "Vincent van Gogh",
-    "Piet Mondrian",
-    "Joan Miró",
-    "Georgia O'Keeffe",
+    "Gustav Klimt",
+    "Joan Miró"
 )
 
 
