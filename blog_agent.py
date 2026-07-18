@@ -39,13 +39,13 @@ THUMBNAIL_FORMAT = "jpeg"
 # restrained, refined scientific palette.
 THUMBNAIL_ARTIST_STYLES: Tuple[str, ...] = (
     "Pablo Picasso",
-    "Claude Monet",
     "Paul Cézanne",
     "Wassily Kandinsky",
     "Henri Matisse",
     "Paul Klee",
     "Gustav Klimt",
-    "Joan Miró"
+    "Joan Miró",
+    "Itō Jakuchū"
 )
 
 
