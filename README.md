@@ -67,10 +67,13 @@ SequentialAgent (Root)
 
 ## Installation
 
-1. Install required dependencies:
+1. Install the locked dependencies with [uv](https://docs.astral.sh/uv/):
 ```bash
-pip install -r requirements.txt
+uv sync --locked
 ```
+
+`requirements.txt` remains available as a fully pinned compatibility export for environments that require pip.
+Regenerate it after dependency changes with `uv export --locked --no-dev --no-hashes --output-file requirements.txt`.
 
 2. Set up your Google API key:
 ```bash
@@ -91,7 +94,7 @@ If Codex CLI is unavailable or thumbnail generation fails, the QMD file is still
 ### Basic Usage
 
 ```bash
-python blog_agent.py <URL>
+uv run --locked python blog_agent.py <URL>
 ```
 
 This saves a Quarto `.qmd` file by default and attempts to generate a local 600x600 thumbnail directly under `output/`.
@@ -99,25 +102,25 @@ This saves a Quarto `.qmd` file by default and attempts to generate a local 600x
 ### With API Key as Argument
 
 ```bash
-python blog_agent.py <URL> --api-key <your-api-key>
+uv run --locked python blog_agent.py <URL> --api-key <your-api-key>
 ```
 
 ### Save as Markdown File
 
 ```bash
-python blog_agent.py <URL> --save-md
+uv run --locked python blog_agent.py <URL> --save-md
 ```
 
 ### Skip Thumbnail Generation
 
 ```bash
-python blog_agent.py <URL> --no-thumbnail
+uv run --locked python blog_agent.py <URL> --no-thumbnail
 ```
 
 ### Add Custom Instructions
 
 ```bash
-python blog_agent.py <URL> --custom "Focus on technical details and include code examples where relevant."
+uv run --locked python blog_agent.py <URL> --custom "Focus on technical details and include code examples where relevant."
 ```
 
 Custom instructions are inserted into the BlogWriterAgent's instruction set and can be used to modify writing style, focus areas, or add specific requirements.
@@ -125,7 +128,7 @@ Custom instructions are inserted into the BlogWriterAgent's instruction set and 
 ### Use Custom Style Reference File
 
 ```bash
-python blog_agent.py <URL> --style style_XX.md
+uv run --locked python blog_agent.py <URL> --style style_XX.md
 ```
 
 The `--style` option allows you to specify a custom style reference file located in the script directory. The file should contain an example blog post that demonstrates the writing style you want the BlogWriterAgent to emulate. If not specified, the system defaults to `style_reference.md`. The style file is used as a reference for tone, structure, and writing patterns.
@@ -133,7 +136,7 @@ The `--style` option allows you to specify a custom style reference file located
 ### Translate to English
 
 ```bash
-python blog_agent.py <URL> --english
+uv run --locked python blog_agent.py <URL> --english
 ```
 
 When `--english` is specified:
@@ -146,7 +149,7 @@ When `--english` is specified:
 ### Combined Options
 
 ```bash
-python blog_agent.py <URL> --english --custom "Focus on technical details" --style style_XX.md
+uv run --locked python blog_agent.py <URL> --english --custom "Focus on technical details" --style style_XX.md
 ```
 
 ## Output
@@ -189,7 +192,7 @@ The blog writing style can be customized in two ways:
 
 2. **Custom style file**: Use the `--style` command-line argument to specify a different style reference file:
    ```bash
-   python blog_agent.py <URL> --style style_XX.md
+   uv run --locked python blog_agent.py <URL> --style style_XX.md
    ```
    The file must be located in the script directory. The BlogWriterAgent will study this example and emulate its style, tone, and structure.
 
@@ -214,7 +217,8 @@ The system generates up to 3 search queries by default. This can be modified in 
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.10+
+- uv
 - Google ADK (`google-adk`)
 - ContextKit (`contextkit`)
 - Google API Key for Gemini models
