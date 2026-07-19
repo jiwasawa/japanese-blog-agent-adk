@@ -22,15 +22,29 @@ class ThumbnailGenerationTests(unittest.TestCase):
         self.assertTrue(args.no_thumbnail)
 
     def test_thumbnail_style_selection_uses_configured_distribution(self):
+        expected_roster = (
+            "Pablo Picasso",
+            "Paul Cézanne",
+            "Wassily Kandinsky",
+            "Henri Matisse",
+            "Paul Klee",
+            "Gustav Klimt",
+            "Joan Miró",
+            "Itō Jakuchū",
+        )
+        self.assertEqual(blog_agent.THUMBNAIL_ARTIST_STYLES, expected_roster)
+
         cases = [
             (0.0, "Pablo Picasso"),
-            (0.099999, "Pablo Picasso"),
-            (0.1, "Claude Monet"),
-            (0.2, "Paul Cézanne"),
-            (0.399999, "Wassily Kandinsky"),
-            (0.4, "Henri Matisse"),
-            (0.8, "Joan Miró"),
-            (0.999999, "Georgia O'Keeffe"),
+            (0.124999, "Pablo Picasso"),
+            (0.125, "Paul Cézanne"),
+            (0.25, "Wassily Kandinsky"),
+            (0.375, "Henri Matisse"),
+            (0.5, "Paul Klee"),
+            (0.625, "Gustav Klimt"),
+            (0.75, "Joan Miró"),
+            (0.875, "Itō Jakuchū"),
+            (0.999999, "Itō Jakuchū"),
         ]
 
         for random_value, expected_style in cases:
