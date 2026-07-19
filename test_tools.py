@@ -1,3 +1,4 @@
+import json
 from unittest.mock import Mock, patch
 
 import pytest
@@ -80,6 +81,23 @@ def test_direct_fetch_fallback_uses_same_instance_and_snippet_text(api_class):
     assert result == "direct English"
     api.list.assert_called_once_with("video-id")
     api.fetch.assert_called_once_with("video-id")
+
+
+@patch.object(tools, "_fetch_with_ytdlp", return_value="yt-dlp fallback")
+@patch.object(tools, "YTDLP_AVAILABLE", True)
+@patch.object(tools, "YouTubeTranscriptApi")
+def test_json_decode_failures_reach_direct_fetch_and_ytdlp(
+    api_class, fetch_with_ytdlp
+):
+    api = api_class.return_value
+    api.list.side_effect = json.JSONDecodeError("invalid", "", 0)
+    api.fetch.side_effect = json.JSONDecodeError("invalid", "", 0)
+
+    result = tools._fetch_youtube_transcript("video-id", max_retries=1)
+
+    assert result == "yt-dlp fallback"
+    api.fetch.assert_called_once_with("video-id")
+    fetch_with_ytdlp.assert_called_once_with("video-id")
 
 
 @patch.object(tools, "_fetch_with_ytdlp", return_value="yt-dlp fallback")

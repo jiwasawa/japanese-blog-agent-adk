@@ -4,6 +4,7 @@ This module provides tools for fetching content from URLs or local PDF files,
 with special handling for YouTube URLs to extract video transcripts.
 """
 
+import json
 import os
 import time
 from typing import Iterable, Optional
@@ -261,7 +262,12 @@ def _try_fetch_transcript(transcript, max_retries: int, errors: list) -> Optiona
             if text.strip():
                 return text
 
-        except (CouldNotRetrieveTranscript, ParseError, RequestException) as e:
+        except (
+            CouldNotRetrieveTranscript,
+            json.JSONDecodeError,
+            ParseError,
+            RequestException,
+        ) as e:
             error_str = str(e)
             errors.append(f"{transcript.language_code} attempt {attempt + 1}: {type(e).__name__}: {error_str}")
             _check_and_raise_rate_limit(e)
@@ -290,7 +296,12 @@ def _try_translate_transcript(transcript, max_retries: int, errors: list) -> Opt
             if text.strip():
                 return text
 
-        except (CouldNotRetrieveTranscript, ParseError, RequestException) as e:
+        except (
+            CouldNotRetrieveTranscript,
+            json.JSONDecodeError,
+            ParseError,
+            RequestException,
+        ) as e:
             error_str = str(e)
             errors.append(f"translate to en attempt {attempt + 1}: {type(e).__name__}: {error_str}")
             _check_and_raise_rate_limit(e)
@@ -349,7 +360,11 @@ def _fetch_youtube_transcript(video_id: str, max_retries: int = 3) -> str:
 
     except YouTubeRateLimitError:
         raise
-    except (CouldNotRetrieveTranscript, RequestException) as e:
+    except (
+        CouldNotRetrieveTranscript,
+        json.JSONDecodeError,
+        RequestException,
+    ) as e:
         error_str = str(e)
         errors.append(f"list: {type(e).__name__}: {error_str}")
         _check_and_raise_rate_limit(e)
@@ -365,7 +380,12 @@ def _fetch_youtube_transcript(video_id: str, max_retries: int = 3) -> str:
             if text.strip():
                 return text
 
-        except (CouldNotRetrieveTranscript, ParseError, RequestException) as e:
+        except (
+            CouldNotRetrieveTranscript,
+            json.JSONDecodeError,
+            ParseError,
+            RequestException,
+        ) as e:
             error_str = str(e)
             errors.append(f"fetch attempt {attempt + 1}: {type(e).__name__}: {error_str}")
             _check_and_raise_rate_limit(e)
