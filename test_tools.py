@@ -1,10 +1,11 @@
 from unittest.mock import Mock, patch
 
-from youtube_transcript_api import (
-    FetchedTranscriptSnippet,
-    IpBlocked,
-    TranscriptsDisabled,
-)
+import pytest
+
+_youtube_transcript_api = pytest.importorskip("youtube_transcript_api")
+FetchedTranscriptSnippet = _youtube_transcript_api.FetchedTranscriptSnippet
+IpBlocked = _youtube_transcript_api.IpBlocked
+TranscriptsDisabled = _youtube_transcript_api.TranscriptsDisabled
 
 import tools
 
