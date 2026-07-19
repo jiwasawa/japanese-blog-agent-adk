@@ -1,5 +1,5 @@
 google-adk
 contextkit
-youtube-transcript-api
+youtube-transcript-api>=1.0,<2
 yt-dlp
 

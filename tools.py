@@ -4,17 +4,25 @@ This module provides tools for fetching content from URLs or local PDF files,
 with special handling for YouTube URLs to extract video transcripts.
 """
 
+import json
 import os
 import time
-from typing import Optional
+from typing import Iterable, Optional
 from urllib.parse import urlparse, parse_qs, unquote
+from xml.etree.ElementTree import ParseError
 
+from requests.exceptions import RequestException
 from google.adk.tools import FunctionTool
 from contextkit.read import read_link, read_pdf
 
 # Optional imports for YouTube transcript fetching
 try:
-    from youtube_transcript_api import YouTubeTranscriptApi
+    from youtube_transcript_api import (
+        CouldNotRetrieveTranscript,
+        FetchedTranscriptSnippet,
+        RequestBlocked,
+        YouTubeTranscriptApi,
+    )
     YOUTUBE_TRANSCRIPT_AVAILABLE = True
 except ImportError:
     YOUTUBE_TRANSCRIPT_AVAILABLE = False
@@ -46,9 +54,13 @@ def _sanitize_for_adk(text: str) -> str:
     return text.replace("{", "｛").replace("}", "｝")
 
 
-def _check_and_raise_rate_limit(error_str: str) -> None:
-    """Check if error indicates rate limiting and raise YouTubeRateLimitError if so."""
-    if '429' in error_str or 'Too Many Requests' in error_str:
+def _check_and_raise_rate_limit(error: BaseException) -> None:
+    """Raise the app's rate-limit error for known or textual 429 failures."""
+    error_str = str(error)
+    is_blocked = (
+        YOUTUBE_TRANSCRIPT_AVAILABLE and isinstance(error, RequestBlocked)
+    )
+    if is_blocked or '429' in error_str or 'Too Many Requests' in error_str:
         raise YouTubeRateLimitError(
             "YouTube rate limit hit (429). Please wait and try again later."
         )
@@ -221,7 +233,7 @@ def _fetch_with_ytdlp(video_id: str) -> str:
                     
         except Exception as e:
             error_str = str(e)
-            _check_and_raise_rate_limit(error_str)
+            _check_and_raise_rate_limit(e)
             raise Exception(f"yt-dlp download failed: {error_str}")
 
 
@@ -229,9 +241,14 @@ def _fetch_with_ytdlp(video_id: str) -> str:
 # YouTube Transcript Fetching (youtube-transcript-api)
 # =============================================================================
 
+def _join_transcript_snippets(snippets: Iterable["FetchedTranscriptSnippet"]) -> str:
+    """Join snippet text returned by youtube-transcript-api 1.x."""
+    return ' '.join(snippet.text for snippet in snippets)
+
+
 def _try_fetch_transcript(transcript, max_retries: int, errors: list) -> Optional[str]:
     """Try to fetch a single transcript with retries.
-    
+
     Returns transcript text on success, None on failure.
     Raises YouTubeRateLimitError if rate limited.
     """
@@ -239,28 +256,32 @@ def _try_fetch_transcript(transcript, max_retries: int, errors: list) -> Optiona
         try:
             if attempt > 0:
                 time.sleep(1.0 * (2 ** (attempt - 1)))  # Exponential backoff
-            
-            chunks = transcript.fetch()
-            text = ' '.join([chunk['text'] for chunk in chunks])
-            
+
+            text = _join_transcript_snippets(transcript.fetch())
+
             if text.strip():
                 return text
-                
-        except Exception as e:
+
+        except (
+            CouldNotRetrieveTranscript,
+            json.JSONDecodeError,
+            ParseError,
+            RequestException,
+        ) as e:
             error_str = str(e)
             errors.append(f"{transcript.language_code} attempt {attempt + 1}: {type(e).__name__}: {error_str}")
-            _check_and_raise_rate_limit(error_str)
-            
-            # Wait longer for ParseErrors (often transient)
-            if "ParseError" in type(e).__name__ or "no element found" in error_str:
+            _check_and_raise_rate_limit(e)
+
+            # Parse errors are often transient.
+            if isinstance(e, ParseError):
                 time.sleep(2.0)
-    
+
     return None
 
 
 def _try_translate_transcript(transcript, max_retries: int, errors: list) -> Optional[str]:
     """Try to translate a transcript to English with retries.
-    
+
     Returns translated text on success, None on failure.
     Raises YouTubeRateLimitError if rate limited.
     """
@@ -268,19 +289,23 @@ def _try_translate_transcript(transcript, max_retries: int, errors: list) -> Opt
         try:
             if attempt > 0:
                 time.sleep(1.0 * (2 ** (attempt - 1)))
-            
+
             translated = transcript.translate('en')
-            chunks = translated.fetch()
-            text = ' '.join([chunk['text'] for chunk in chunks])
-            
+            text = _join_transcript_snippets(translated.fetch())
+
             if text.strip():
                 return text
-                
-        except Exception as e:
+
+        except (
+            CouldNotRetrieveTranscript,
+            json.JSONDecodeError,
+            ParseError,
+            RequestException,
+        ) as e:
             error_str = str(e)
             errors.append(f"translate to en attempt {attempt + 1}: {type(e).__name__}: {error_str}")
-            _check_and_raise_rate_limit(error_str)
-    
+            _check_and_raise_rate_limit(e)
+
     return None
 
 
@@ -288,8 +313,8 @@ def _fetch_youtube_transcript(video_id: str, max_retries: int = 3) -> str:
     """Fetch transcript from YouTube video.
     
     Tries multiple approaches in order:
-    1. youtube-transcript-api with list_transcripts()
-    2. youtube-transcript-api with get_transcript()
+    1. youtube-transcript-api with list()
+    2. youtube-transcript-api with fetch()
     3. yt-dlp fallback
     
     Args:
@@ -308,53 +333,62 @@ def _fetch_youtube_transcript(video_id: str, max_retries: int = 3) -> str:
         raise ImportError("youtube-transcript-api is not installed. Run: pip install youtube-transcript-api")
     
     errors = []
-    
-    # Approach 1: Use list_transcripts() to find and fetch available transcripts
+    transcript_api = YouTubeTranscriptApi()
+
+    # Approach 1: Use list() to find and fetch available transcripts.
     try:
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-        available = list(transcript_list)
-        
+        available = list(transcript_api.list(video_id))
+
         if available:
-            # Sort: prefer manual over auto-generated, prefer English
+            # Prefer manual over auto-generated transcripts, then prefer English.
             available.sort(key=lambda t: (
                 0 if not t.is_generated else 1,
                 0 if t.language_code.startswith('en') else 1
             ))
-            
-            # Try fetching each transcript
+
             for transcript in available:
                 result = _try_fetch_transcript(transcript, max_retries, errors)
                 if result:
                     return result
-            
-            # Try translating auto-generated transcripts
+
+            # Preserve the existing final fallback of translating generated tracks.
             for transcript in available:
                 if transcript.is_generated and transcript.is_translatable:
                     result = _try_translate_transcript(transcript, max_retries, errors)
                     if result:
                         return result
-                        
+
     except YouTubeRateLimitError:
         raise
-    except Exception as e:
-        errors.append(f"list_transcripts: {type(e).__name__}: {str(e)}")
-    
-    # Approach 2: Try direct get_transcript()
+    except (
+        CouldNotRetrieveTranscript,
+        json.JSONDecodeError,
+        RequestException,
+    ) as e:
+        error_str = str(e)
+        errors.append(f"list: {type(e).__name__}: {error_str}")
+        _check_and_raise_rate_limit(e)
+
+    # Approach 2: Try the direct English transcript shortcut.
     for attempt in range(max_retries):
         try:
             if attempt > 0:
                 time.sleep(2.0 * (2 ** (attempt - 1)))
-            
-            chunks = YouTubeTranscriptApi.get_transcript(video_id)
-            text = ' '.join([chunk['text'] for chunk in chunks])
-            
+
+            text = _join_transcript_snippets(transcript_api.fetch(video_id))
+
             if text.strip():
                 return text
-                
-        except Exception as e:
+
+        except (
+            CouldNotRetrieveTranscript,
+            json.JSONDecodeError,
+            ParseError,
+            RequestException,
+        ) as e:
             error_str = str(e)
-            errors.append(f"get_transcript attempt {attempt + 1}: {type(e).__name__}: {error_str}")
-            _check_and_raise_rate_limit(error_str)
+            errors.append(f"fetch attempt {attempt + 1}: {type(e).__name__}: {error_str}")
+            _check_and_raise_rate_limit(e)
     
     # Approach 3: yt-dlp fallback
     if YTDLP_AVAILABLE:
