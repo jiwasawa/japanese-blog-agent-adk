@@ -67,10 +67,13 @@ SequentialAgent (Root)
 
 ## Installation
 
-1. Install required dependencies:
+1. Install the locked dependencies with [uv](https://docs.astral.sh/uv/):
 ```bash
-pip install -r requirements.txt
+uv sync --locked
 ```
+
+`requirements.txt` remains available as a fully pinned compatibility export for environments that require pip.
+Regenerate it after dependency changes with `uv export --locked --no-dev --no-hashes --output-file requirements.txt`.
 
 2. Set up your Google API key:
 ```bash
@@ -214,7 +217,8 @@ The system generates up to 3 search queries by default. This can be modified in 
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.10+
+- uv
 - Google ADK (`google-adk`)
 - ContextKit (`contextkit`)
 - Google API Key for Gemini models
